@@ -105,6 +105,12 @@ make_and_write_output_file <- function(
 
     print_message("Loop over and write output file")
     print_i_output_block <- round(seq(1, nrow(blocks_for_output), length.out = 10))
+
+    Rprof("rprofiling.out", 
+          memory.profiling=TRUE,
+          line.profiling = TRUE,
+          gc.profiling = TRUE,
+          interval = 0.05)
     
     for(i_output_block in 1:nrow(blocks_for_output)) {
 
@@ -188,6 +194,8 @@ make_and_write_output_file <- function(
             hweCount <- hweCount + out[[i]]$hweCount
             afCount <- afCount + out[[i]]$afCount
         }
+
+
         if (output_format == "bgen") {
             ## should be fine if R is indeed just making copies as it normally does
             ## indeed even if it does get removed below
@@ -295,6 +303,9 @@ make_and_write_output_file <- function(
         }
 
     }
+
+    Rprof(NULL)
+
     print_message("Done looping over and writing output file")
     
     ## 
