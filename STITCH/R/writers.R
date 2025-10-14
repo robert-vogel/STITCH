@@ -37,7 +37,6 @@ make_and_write_output_file <- function(
     do_phasing
 ) {
 
-    
     print_message("Begin making and writing output file")
     to_use_output_filename <- get_output_filename(
         output_filename = output_filename,
@@ -264,16 +263,17 @@ make_and_write_output_file <- function(
             vcf_matrix_to_out[, 7] <- "PASS"
             vcf_matrix_to_out[, 8] <- INFO
             vcf_matrix_to_out[, 9] <- FORMAT
-            data.table::fwrite(
-                vcf_matrix_to_out,
+            write.table(vcf_matrix_to_out,
                 file = output_unbgzipped,
                 row.names = FALSE,
                 col.names = FALSE,
                 sep = "\t",
                 quote = FALSE,
                 append = TRUE,
-                nThread = nCores
             )
+
+            rm(vcf_matrix_to_out)
+            gc()
 
         } else if (output_format == "bgen") {
 
@@ -1167,8 +1167,18 @@ get_blocks_in_vector_form <- function(blocks_for_output, nGrids) {
     return(blocks_in_vector_form)
 }
 
-## this assumes reads are sorted but that need not be the case for old STITCH
 ## 
+##
+## Assumption: reads are sorted but that need not be the case for old STITCH
+## 
+# @param N
+# @param blocks_for_output
+# @param nCores
+# @param tempdir
+# @param regionName
+# @param bundling_info
+# @param nGrids
+# @param allSampleReads
 determine_reads_in_output_blocks <- function(
     N,
     blocks_for_output,
