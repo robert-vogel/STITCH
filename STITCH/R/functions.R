@@ -77,6 +77,7 @@
 #' @param use_bx_tag Whether to try and use BX tag in same to indicate that reads come from the same underlying molecule
 #' @param bxTagUpperLimit When using BX tag, at what distance between reads to consider reads with the same BX tag to come from different molecules
 #' @param do_phasing Whether to try and output phasing (experimental)
+#' @param seed A positive integer to be used as a seed to R's random number generator.
 #' @return Results in properly formatted version
 #' @author Robert Davies
 #' @export
@@ -161,7 +162,8 @@ STITCH <- function(
     output_haplotype_dosages = FALSE,
     use_bx_tag = TRUE,
     bxTagUpperLimit = 50000,
-    do_phasing = FALSE
+    do_phasing = FALSE,
+    seed = NULL
 ) {
 
     ## capture command line
@@ -171,7 +173,16 @@ STITCH <- function(
         paste(names(x), " = ", x, collapse = ", ", sep = ""),
         ")"
     )
+
     print_message(paste0("Running ", command_line))
+
+
+    if (typeof(seed) == "integer" && seed > 0)
+        set.seed(seed)
+    else
+        print_message(paste("Input random seed is not a positive integer,"
+                            "using R's default"))
+
 
     ## disable as an option phasing for now
     ## do_phasing = FALSE
