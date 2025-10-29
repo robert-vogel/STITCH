@@ -1,201 +1,84 @@
-## the function called by STITCH
-make_and_write_output_file <- function(
-    output_filename,
-    outputdir,
-    regionName,
-    output_format,
-    blocks_for_output,
-    allAlphaBetaBlocks,
-    allPhasing,
-    reference_panel_SNPs,
-    priorCurrent_m,
-    sigmaCurrent_m,
-    alphaMatCurrent_tc,
-    eHapsCurrent_tc,
-    N,
-    method,
-    sampleNames,
-    nSNPs,
-    nGrids,
-    nCores,
-    B_bit_prob,
-    bundling_info,
-    tempdir,
-    grid,
-    alleleCount,
-    pos,
-    K,
-    highCovInLow,
-    start_and_end_minus_buffer,
-    allSampleReads,
-    niterations,
-    maxEmissionMatrixDifference,
-    maxDifferenceBetweenReads,
-    Jmax,
-    useTempdirWhileWriting,
-    output_haplotype_dosages,
-    do_phasing
-) {
 
-    
-    print_message("Begin making and writing output file")
-    to_use_output_filename <- get_output_filename(
-        output_filename = output_filename,
-        outputdir = outputdir,
-        regionName = regionName,
-        output_format = output_format
+## User API is only the make_and_write_output_file.
+##
+##
+
+
+
+###############################################################
+# Writer closures
+###############################################################
+#
+# The writer closuresare set up to create a uniform function interface
+# to output files of distinct type.  This is acheived by each file having
+# a unique state, which is established by the closure generating function
+# call.
+
+bgen_writer <- function(output_filename, 
+                         sample_names,
+                         B_bit_prob,
+                         start_and_end_minus_buffer) {
+
+    ## bgen header here
+    out <- rrbgen::rrbgen_write(
+        output_filename,
+        sample_names = sample_names,
+        B_bit_prob = B_bit_prob,
+        close_bgen_file = FALSE,
+        header_M = start_and_end_minus_buffer[2] - start_and_end_minus_buffer[1] + 1
     )
-    annot_header <- get_per_snp_annot(
-        output_format = output_format,
-        reference_panel_SNPs = reference_panel_SNPs,
-        return_annotation_only = TRUE
-    )$annot_header
 
-    read_starts_and_ends <- determine_reads_in_output_blocks(
-        N = N,
-        blocks_for_output = blocks_for_output,
-        nCores = nCores,
-        tempdir = tempdir,
-        regionName = regionName,
-        bundling_info = bundling_info,
-        nGrids = nGrids,
-        allSampleReads = allSampleReads
-    )     
+    bgen_file_connection <- out$bgen_file_connection
+    previous_offset <- out$final_binary_length
 
-    print_message("Initialize output file")
-    if (output_format == "bgvcf") {
-        ## put into temp file, then later bgzip (future: can I stream this?)
-        output_unbgzipped <- paste0(to_use_output_filename, ".building.vcf")
-        unlink(output_unbgzipped)
-        make_and_write_vcf_header(
-            output_vcf_header = output_unbgzipped,
-            annot_header = annot_header,
-            method = method,
-            sampleNames = sampleNames,
-            output_haplotype_dosages = output_haplotype_dosages,
-            K = K
-        )
-    } else if (output_format == "bgen") {
-        ## bgen header here
-        out <- rrbgen::rrbgen_write(
-            to_use_output_filename,
-            sample_names = sampleNames,
-            B_bit_prob = B_bit_prob,
-            close_bgen_file = FALSE,
-            header_M = start_and_end_minus_buffer[2] - start_and_end_minus_buffer[1] + 1
-        )
-        bgen_file_connection <- out$bgen_file_connection
-        previous_offset <- out$final_binary_length
-    }
-    print_message("Done initializing output file")    
-
-    sampleRanges <- getSampleRange(N, nCores)    
-    ## write blocks
-    transMatRate_tc_H <- get_transMatRate_m(method = "diploid-inbred", sigmaCurrent_m = sigmaCurrent_m)
-    transMatRate_tc_D <- get_transMatRate_m(method = "diploid", sigmaCurrent_m = sigmaCurrent_m)
-    info <- array(NA, nSNPs)
-    hwe <- array(NA, nSNPs)
-    hweCount_total <- array(NA, c(nSNPs, 3))    
-    estimatedAlleleFrequency <- array(NA, nSNPs)
-    if (length(highCovInLow) > 0) {
-        gen_imp <- array(NA, c(nSNPs, length(highCovInLow)))
-    } else {
-        gen_imp <- NULL
-    }
-
-    print_message("Loop over and write output file")
-    print_i_output_block <- round(seq(1, nrow(blocks_for_output), length.out = 10))
-    
-    for(i_output_block in 1:nrow(blocks_for_output)) {
-
-        ## print out no more than 10 messages
-        if (i_output_block %in% print_i_output_block) {
-            print_message(paste0(
-                "Making output piece ",
-                i_output_block, " / ", nrow(blocks_for_output)
-            ))
-        }
-        
-        first_snp_in_region <- blocks_for_output[i_output_block, "snp_start_1_based"]
-        last_snp_in_region <- blocks_for_output[i_output_block, "snp_end_1_based"]        
-        snps_in_output_block <- first_snp_in_region:last_snp_in_region
-        
-        first_grid_in_region <- blocks_for_output[i_output_block, "grid_start_0_based"]
-        last_grid_in_region <- blocks_for_output[i_output_block, "grid_end_0_based"]                
-        grids_in_output_block <- first_grid_in_region:last_grid_in_region
-        
-        nSNPsInOutputBlock <- length(snps_in_output_block)
-
-        ## shrink params
-        if (first_grid_in_region < last_grid_in_region) {
-            grids_to_use <- first_grid_in_region:(last_grid_in_region - 1)
-            ## what? is this right?
-            alphaMatCurrentLocal_tc <- alphaMatCurrent_tc[, 1 + grids_to_use, , drop = FALSE]
-            transMatRateLocal_tc_H <- transMatRate_tc_H[, 1 + grids_to_use, , drop = FALSE]
-            transMatRateLocal_tc_D <- transMatRate_tc_D[, 1 + grids_to_use, , drop = FALSE]            
-        } else {
-            alphaMatCurrentLocal_tc <- NULL
-            transMatRateLocal_tc_H <- NULL
-            transMatRateLocal_tc_D <- NULL
-        }
-        
-        ##
-        out <- mclapply(
-            sampleRanges,
-            mc.cores = nCores,
-            B_bit_prob = B_bit_prob,
-            tempdir = tempdir,
-            regionName = regionName,
-            bundling_info = bundling_info,
-            K = K,
-            allAlphaBetaBlocks = allAlphaBetaBlocks,
-            allPhasing = allPhasing,
-            alphaMatCurrentLocal_tc = alphaMatCurrentLocal_tc,
-            eHapsCurrent_tc = eHapsCurrent_tc,
-            transMatRateLocal_tc_H = transMatRateLocal_tc_H,
-            transMatRateLocal_tc_D = transMatRateLocal_tc_D,
-            first_grid_in_region = first_grid_in_region,
-            last_grid_in_region = last_grid_in_region,
-            i_output_block = i_output_block,
-            read_starts_and_ends = read_starts_and_ends,
-            first_snp_in_region = first_snp_in_region,
-            last_snp_in_region = last_snp_in_region,
-            nSNPsInOutputBlock = nSNPsInOutputBlock,
-            output_format = output_format,
-            method = method,
-            grid = grid,
-            highCovInLow = highCovInLow,
-            allSampleReads = allSampleReads,
-            outputdir = outputdir,
-            niterations = niterations,
-            maxEmissionMatrixDifference = maxEmissionMatrixDifference,
-            maxDifferenceBetweenReads = maxDifferenceBetweenReads,
-            Jmax = Jmax,
-            useTempdirWhileWriting = useTempdirWhileWriting,
-            output_haplotype_dosages = output_haplotype_dosages,
-            do_phasing = do_phasing,
-            FUN = per_core_get_results
-        )
-
-        check_mclapply_OK(out)
-
-        ## rebuild / re-assemble
-        hweCount <- array(0, c(nSNPsInOutputBlock, 3))
-        infoCount <- array(0, c(nSNPsInOutputBlock, 2))
-        afCount <- array(0, nSNPsInOutputBlock)
-        for(i in 1:length(out)) {
-            infoCount <- infoCount + out[[i]]$infoCount
-            hweCount <- hweCount + out[[i]]$hweCount
-            afCount <- afCount + out[[i]]$afCount
-        }
-        if (output_format == "bgen") {
+    function() {
             ## should be fine if R is indeed just making copies as it normally does
             ## indeed even if it does get removed below
             list_of_gp_raw_t <- lapply(1:length(out), function(i_core) {
                 gp_raw_t <- out[[i_core]]$gp_raw_t
                 return(gp_raw_t)
             })
-        } else if (output_format == "bgvcf") {
+            var_info <- make_var_info(pos, c(first_snp_in_region, last_snp_in_region))
+            out <- rrbgen::rrbgen_write(
+                bgen_file_connection = bgen_file_connection,
+                previous_offset = previous_offset,
+                add_to_bgen_connection = TRUE,
+                close_bgen_file = FALSE,
+                list_of_gp_raw_t = list_of_gp_raw_t,
+                sample_names = sampleNames,
+                var_info = var_info,
+                B_bit_prob = B_bit_prob,
+                nCores = nCores
+            )
+            bgen_file_connection <- out$bgen_file_connection
+            previous_offset <- out$final_binary_length
+    }
+}
+
+
+bcf_writer <- function() {
+    function() {
+    }
+}
+
+
+bgvcf_writer <- function(output_filename,
+                         annot_header,
+                         method,
+                         sample_names) {
+    output_unbgzipped <- paste0(to_use_output_filename, ".building.vcf")
+    unlink(output_unbgzipped)
+    make_and_write_vcf_header(
+    output_vcf_header = output_unbgzipped,
+    annot_header = annot_header,
+    method = method,
+    sampleNames = sample_names,
+    output_haplotype_dosages = output_haplotype_dosages,
+    K = K,
+    blocks_for_output
+    )
+
+    function() {
             ## make the WHOLE THING here
             vcf_matrix_to_out <- data.frame(matrix(
                 data = NA,
@@ -206,49 +89,6 @@ make_and_write_output_file <- function(
                 sampleRange <- sampleRanges[[i]]
                 vcf_matrix_to_out[, 9 + sampleRange[1]:sampleRange[2]] <- out[[i]]$vcf_matrix_to_out
             }
-        }
-        ##
-        rm(out)
-        if (N > 10000) {
-            gc(reset = TRUE); gc(reset = TRUE)
-        }
-
-        if (length(highCovInLow) > 0) {
-            for(j in 1:length(highCovInLow)) {
-                ## get gp_t
-                load(file = file_dosages(tempdir, highCovInLow[j], regionName, "piece.gp_t"))
-                gen_imp[snps_in_output_block, j] <- gp_t[2, ] + 2 * gp_t[3, ]
-            }
-        }
-        
-        ## now make HWE etc
-        thetaHat <- infoCount[, 1] / 2 / N
-        denom <- 2 * N * thetaHat * (1-thetaHat)
-        info[snps_in_output_block] <- 1 - infoCount[, 2] / denom
-        ## block out those where thetaHat is really close to 0 or 1
-        ## when very rare
-        info[snps_in_output_block][(round(thetaHat, 2) == 0) | (round(thetaHat, 2) == 1)] <- 1
-        info[info < 0] <- 0
-        ## not 100% sure this is OK, might fail if higher bq average, but anyway, entirely ref/alt SNPs not interesting
-        estimatedAlleleFrequency[snps_in_output_block] <- afCount / N
-        hwe[snps_in_output_block] <- generate_hwe_on_counts(hweCount, nSNPsInOutputBlock, nCores)
-        hweCount_total[snps_in_output_block, ] <- hweCount
-
-        ## now, can output!
-        out <- get_per_snp_annot(
-            output_format = output_format,
-            reference_panel_SNPs = reference_panel_SNPs[snps_in_output_block],
-            estimatedAlleleFrequency = estimatedAlleleFrequency[snps_in_output_block],
-            info = info[snps_in_output_block],
-            hwe = hwe[snps_in_output_block],
-            alleleCount = alleleCount[snps_in_output_block, , drop = FALSE]
-        )
-        
-        INFO <- out$INFO
-
-        ## now write block for
-        if (output_format == "bgvcf") {
-
             if (!output_haplotype_dosages) {
                 FORMAT <- "GT:GP:DS"
             } else {
@@ -274,30 +114,250 @@ make_and_write_output_file <- function(
                 append = TRUE,
                 nThread = nCores
             )
+    }
+}
 
-        } else if (output_format == "bgen") {
+prepare_writer(output_filename,
+               output_dir,
+               region_name,
+               output_format,
+               reference_panel_SNPs,
+               n_samples,
+               blocks_for_output,
+               n_cores,
+               temp_dir,
+               bundling_info,
+               n_grids,
+               all_sample_reads,
+               B_bit_prob,
+               start_and_end_minus_buffer,
+               use_temp_dir_while_writing
+               ) {
 
-            var_info <- make_var_info(pos, c(first_snp_in_region, last_snp_in_region))
-            out <- rrbgen::rrbgen_write(
-                bgen_file_connection = bgen_file_connection,
-                previous_offset = previous_offset,
-                add_to_bgen_connection = TRUE,
-                close_bgen_file = FALSE,
-                list_of_gp_raw_t = list_of_gp_raw_t,
-                sample_names = sampleNames,
-                var_info = var_info,
-                B_bit_prob = B_bit_prob,
-                nCores = nCores
-            )
-            bgen_file_connection <- out$bgen_file_connection
-            previous_offset <- out$final_binary_length
-            
+    to_use_output_filename <- get_output_filename(
+        output_filename = output_filename,
+        outputdir = output_dir,
+        regionName = region_name,
+        output_format = output_format
+    )
+
+    annot_header <- get_per_snp_annot(
+        output_format = output_format,
+        reference_panel_SNPs = reference_panel_SNPs,
+        return_annotation_only = TRUE
+    )$annot_header
+
+    read_starts_and_ends <- determine_reads_in_output_blocks(
+        N = n_samples,
+        blocks_for_output = blocks_for_output,
+        nCores = n_cores,
+        tempdir = temp_dir,
+        regionName = region_name,
+        bundling_info = bundling_info,
+        nGrids = n_grids,
+        allSampleReads = all_sample_reads
+    )     
+
+    if (output_format == "bgen")
+        return(bgen_writer())
+    else if (output_format == "bgvcf")
+        return(bgvcf_writer())
+    else if (output_format == "bcf")
+        return(bcf_writer())
+
+    stop(paste("Error: invalid output format, requires either,",
+               "bgen, bgvcf, or bcf."))
+}
+
+
+
+
+###############################################################
+
+# output_filename,
+# outputdir,
+# regionName,
+# output_format,
+# blocks_for_output,
+# allAlphaBetaBlocks,
+# allPhasing,
+# reference_panel_SNPs,
+# priorCurrent_m,
+# sigmaCurrent_m,
+# alphaMatCurrent_tc,
+# eHapsCurrent_tc,
+# N,
+# method,
+# sampleNames,
+# nSNPs,
+# nGrids,
+# nCores,
+# B_bit_prob,
+# bundling_info,
+# tempdir,
+# grid,
+# alleleCount,
+# pos,
+# K,
+# highCovInLow,
+# start_and_end_minus_buffer,
+# allSampleReads,
+# niterations,
+# maxEmissionMatrixDifference,
+# maxDifferenceBetweenReads,
+# Jmax,
+# useTempdirWhileWriting,
+# output_haplotype_dosages,
+# do_phasing
+
+## the function called by STITCH
+#'
+#' @param writer (function closure) Used to print imputed genotypes to file
+#' @param n_cores (integer) Number of cores for imputation and writing 
+#' @param K (integer) Size of ancestral population
+#' @param
+make_and_write_output_file <- function(writer
+    n_samples,
+    n_snps,
+    n_cores,
+    sigmaCurrent_m,
+    high_cov_in_low,
+    alphaMatCurrent_tc,
+    ) {
+
+    
+    print_message("Begin making and writing output file")
+    
+    ## put into temp file, then later bgzip (future: can I stream this?)
+    print_message("Initialize output file")
+
+    ## Add an else statement to catch errors
+    print_message("Done initializing output file")    
+
+    sampleRanges <- getSampleRange(n_samples, n_cores)    
+    ## write blocks
+    transMatRate_tc_H <- get_transMatRate_m(method = "diploid-inbred", sigmaCurrent_m = sigmaCurrent_m)
+    transMatRate_tc_D <- get_transMatRate_m(method = "diploid", sigmaCurrent_m = sigmaCurrent_m)
+
+    info <- array(NA, n_snps)
+    hwe <- array(NA, n_snps)
+    hweCount_total <- array(NA, c(n_snps, 3))    
+    estimatedAlleleFrequency <- array(NA, n_snps)
+
+
+    gen_imp <- NULL
+    if (length(high_cov_in_low) > 0)
+        gen_imp <- array(NA, c(nSNPs, length(high_cov_in_low)))
+
+
+    # TODO: blocks_for_output
+    print_message("Loop over and write output file")
+    n_blocks <- nrow(blocks_for_output)
+
+
+    ## print out about 10 messages, to do this I'll use the modulo operation
+    ## in the for loop
+    n_blocks_per_print <- floor(n_blocks / 10)
+    
+    print_message(paste("Making output piece", 1, "/", n_blocks))
+    for (i_output_block in seq(1, n_blocks)) {
+
+        # update progress 
+        if (i_output_block %% n_blocks_per_print == 0)
+            print_message(paste("Making output piece", i_output_block, "/", n_blocks))
+        
+        first_snp_in_region <- blocks_for_output[i_output_block, "snp_start_1_based"]
+        last_snp_in_region <- blocks_for_output[i_output_block, "snp_end_1_based"]        
+        snps_in_output_block <- first_snp_in_region:last_snp_in_region
+        
+        first_grid_in_region <- blocks_for_output[i_output_block, "grid_start_0_based"]
+        last_grid_in_region <- blocks_for_output[i_output_block, "grid_end_0_based"]                
+        grids_in_output_block <- first_grid_in_region:last_grid_in_region
+
+
+
+        # TODO: where is snps_in_output_block 
+        nSNPsInOutputBlock <- length(snps_in_output_block)
+
+        ## shrink params
+        alphaMatCurrentLocal_tc <- NULL
+        transMatRateLocal_tc_H <- NULL
+        transMatRateLocal_tc_D <- NULL
+
+        if (first_grid_in_region < last_grid_in_region) {
+            grids_to_use <- first_grid_in_region:(last_grid_in_region - 1)
+            ## what? is this right?
+            alphaMatCurrentLocal_tc <- alphaMatCurrent_tc[, 1 + grids_to_use, , drop = FALSE]
+            transMatRateLocal_tc_H <- transMatRate_tc_H[, 1 + grids_to_use, , drop = FALSE]
+            transMatRateLocal_tc_D <- transMatRate_tc_D[, 1 + grids_to_use, , drop = FALSE]            
         }
 
+        inference_pars_core <- mk_per_core_computation_requirements()
+        
+        ##
+        out <- mclapply(
+            inference_pars_core,
+            per_core_get_results
+            mc.cores = nCores,
+        )
+
+        check_mclapply_OK(out)
+
+        ## rebuild / re-assemble
+        hweCount <- array(0, c(nSNPsInOutputBlock, 3))
+        infoCount <- array(0, c(nSNPsInOutputBlock, 2))
+        afCount <- array(0, nSNPsInOutputBlock)
+        for(i in 1:length(out)) {
+            infoCount <- infoCount + out[[i]]$infoCount
+            hweCount <- hweCount + out[[i]]$hweCount
+            afCount <- afCount + out[[i]]$afCount
+        }
+
+
+        writer(out)
+
+        rm(out)
+        gc()
+
+        if (length(highCovInLow) > 0) {
+            for(j in 1:length(highCovInLow)) {
+                ## get gp_t
+                load(file = file_dosages(tempdir, highCovInLow[j], regionName, "piece.gp_t"))
+                gen_imp[snps_in_output_block, j] <- gp_t[2, ] + 2 * gp_t[3, ]
+            }
+        }
+        
+        ## now make HWE etc
+        thetaHat <- infoCount[, 1] / 2 / N
+        denom <- 2 * N * thetaHat * (1-thetaHat)
+        info[snps_in_output_block] <- 1 - infoCount[, 2] / denom
+
+        ## block out those where thetaHat is really close to 0 or 1
+        ## when very rare
+        info[snps_in_output_block][(round(thetaHat, 2) == 0) | (round(thetaHat, 2) == 1)] <- 1
+        info[info < 0] <- 0
+        
+        ## not 100% sure this is OK, might fail if higher bq average, but anyway, 
+        ## entirely ref/alt SNPs not interesting
+        estimatedAlleleFrequency[snps_in_output_block] <- afCount / N
+        hwe[snps_in_output_block] <- generate_hwe_on_counts(hweCount, nSNPsInOutputBlock, nCores)
+        hweCount_total[snps_in_output_block, ] <- hweCount
+
+        ## now, can output!
+        out <- get_per_snp_annot(
+            output_format = output_format,
+            reference_panel_SNPs = reference_panel_SNPs[snps_in_output_block],
+            estimatedAlleleFrequency = estimatedAlleleFrequency[snps_in_output_block],
+            info = info[snps_in_output_block],
+            hwe = hwe[snps_in_output_block],
+            alleleCount = alleleCount[snps_in_output_block, , drop = FALSE]
+        )
+        
+        INFO <- out$INFO
     }
     print_message("Done looping over and writing output file")
     
-    ## 
+    ## TODO: this will be uncessary as I will use htslib to write to bgzip
     if (output_format == "bgvcf") {
         print_message("bgzip output file and move to final location")
         system(paste0("bgzip --threads ", nCores, " -f ", shQuote(output_unbgzipped)))
@@ -333,265 +393,10 @@ make_and_write_output_file <- function(
     )
     
 }
-
-per_core_get_results <- function(
-    sampleRange,
-    B_bit_prob,
-    tempdir,
-    regionName,
-    bundling_info,
-    K,
-    allAlphaBetaBlocks,
-    allPhasing,
-    alphaMatCurrentLocal_tc,
-    eHapsCurrent_tc,
-    transMatRateLocal_tc_H,
-    transMatRateLocal_tc_D,    
-    first_grid_in_region,
-    last_grid_in_region,    
-    i_output_block,
-    read_starts_and_ends,
-    first_snp_in_region,
-    last_snp_in_region,
-    nSNPsInOutputBlock,
-    output_format,
-    method,
-    grid,
-    highCovInLow,
-    allSampleReads,
-    outputdir,
-    niterations,
-    maxEmissionMatrixDifference,
-    maxDifferenceBetweenReads,
-    Jmax,
-    useTempdirWhileWriting,
-    output_haplotype_dosages,
-    do_phasing
-) {
-
-    bundledSampleReads <- NULL
-    bundledSampleProbs <- NULL
-    bundledAlphaBetaBlocks <- NULL
-    bundledPhasing <- NULL
-    
-    ## load sample
-    ## load pRgivenH1
-    K <- dim(eHapsCurrent_tc)[1]        
-    nSNPs <- dim(eHapsCurrent_tc)[2]
-    S <- dim(eHapsCurrent_tc)[3]
-    who_to_run <- sampleRange[1]:sampleRange[2]
-    N_core <- sampleRange[2] - sampleRange[1] + 1 ## number in this core
-    hweCount <- array(0, c(nSNPsInOutputBlock, 3))
-    infoCount <- array(0, c(nSNPsInOutputBlock, 2))
-    afCount <- array(0, nSNPsInOutputBlock)
-
-    if (output_format == "bgvcf") {
-        vcf_matrix_to_out <- data.frame(matrix(
-            data = NA,
-            nrow = nSNPsInOutputBlock,
-            ncol = N_core
-        ))
-        gp_raw_t <- NULL
-    } else if (output_format == "bgen") {
-        gp_raw_t <- matrix(
-            data = raw(0),
-            nrow = N_core * 2 * (B_bit_prob / 8),
-            ncol = nSNPsInOutputBlock
-        )
-        vcf_matrix_to_out <- NULL
-    }
-    pRgivenH1_m<- NULL
-    pRgivenH2_m<- NULL
-
-    for (iiSample in 1:(length(who_to_run))) {
-        
-        iSample <- who_to_run[iiSample]
-        ## get these from list?
-        out <- get_sampleReads_from_dir_for_sample(
-            dir = tempdir,
-            regionName = regionName,
-            iSample = iSample,
-            bundling_info = bundling_info,
-            bundledSampleReads = bundledSampleReads,
-            allSampleReads = allSampleReads
-        )
-        sampleReads <- out$sampleReads
-        bundledSampleReads <- out$bundledSampleReads
-
-        out <- get_alphaBetaBlocks_from_dir_for_sample(
-            dir = tempdir,
-            regionName = regionName,
-            iSample = iSample,
-            bundling_info = bundling_info,
-            bundledAlphaBetaBlocks = bundledAlphaBetaBlocks,
-            allAlphaBetaBlocks = allAlphaBetaBlocks
-        )
-        alphaBetaBlocks <- out$alphaBetaBlocks
-        bundledAlphaBetaBlocks <- out$bundledAlphaBetaBlocks
-
-        ## note, inefficient in current form
-        if (do_phasing) {
-            out <- get_phasing_from_dir_for_sample(
-                dir = tempdir,
-                regionName = regionName,
-                iSample = iSample,
-                bundling_info = bundling_info,
-                bundledPhasing = bundledPhasing,
-                allPhasing = allPhasing
-            )
-            phasing <- out$phasing
-            bundledPhasing <- out$bundledPhasing
-        }
-
-        if (method == "pseudoHaploid") {
-            out <- get_sampleProbs_from_dir_for_sample(
-                dir = tempdir,
-                regionName = regionName,
-                iSample = iSample,
-                bundling_info = bundling_info,
-                bundledSampleProbs = bundledSampleProbs
-            )
-            pRgivenH1_m <- out$pRgivenH1_m
-            pRgivenH2_m <- out$pRgivenH2_m
-            srp <- out$srp
-            bundledSampleProbs <- out$bundledSampleProbs
-        }
-
-        ## run forward backwards
-        s <- read_starts_and_ends[iSample, i_output_block, 1]
-        e <- read_starts_and_ends[iSample, i_output_block, 2]
-        if (is.na(s) | is.na(e)) {
-            which_reads <- NULL
-        } else {
-            which_reads <- s:e
-        }
-
-        if (first_grid_in_region == last_grid_in_region) {
-
-            fbsoL <- make_fbsoL_for_single_grid(
-                alphaBetaBlocks = alphaBetaBlocks,
-                nSNPsInOutputBlock = nSNPsInOutputBlock,
-                S = S,
-                K = K,
-                eHapsCurrent_tc = eHapsCurrent_tc,
-                grid = grid,
-                first_snp_in_region = first_snp_in_region,
-                last_snp_in_region = last_snp_in_region,
-                first_grid_in_region = first_grid_in_region,
-                i_output_block = i_output_block,
-                method = method
-            )
-            
-        } else {    
-
-            fbsoL <- run_forward_backwards(
-                sampleReads = sampleReads[which_reads],
-                pRgivenH1_m = pRgivenH1_m[which_reads, , drop = FALSE],
-                pRgivenH2_m = pRgivenH2_m[which_reads, , drop = FALSE],
-                method = method,
-                priorCurrent_m = array(-1, c(K, S)), ## irrelevant here
-                alphaMatCurrent_tc = alphaMatCurrentLocal_tc,
-                eHapsCurrent_tc = eHapsCurrent_tc,
-                transMatRate_tc_H = transMatRateLocal_tc_H,
-                transMatRate_tc_D = transMatRateLocal_tc_D, 
-                list_of_alphaBetaBlocks = alphaBetaBlocks, ## yes this is the right input
-                i_snp_block_for_alpha_beta = i_output_block,
-                run_fb_grid_offset = first_grid_in_region,
-                run_fb_subset = TRUE,
-                Jmax = Jmax,
-                maxDifferenceBetweenReads = maxDifferenceBetweenReads,
-                maxEmissionMatrixDifference = maxEmissionMatrixDifference,
-                niterations = niterations,
-                iteration = niterations,
-                return_genProbs = TRUE,
-                grid = grid,
-                snp_start_1_based = first_snp_in_region,
-                snp_end_1_based = last_snp_in_region,
-                output_haplotype_dosages = output_haplotype_dosages ## whether to return states
-            )
-            
-        }
-
-        
-        gp_t <- calculate_gp_t_from_fbsoL(
-            fbsoL = fbsoL,
-            method = method
-        )
-
-        if (iSample %in% highCovInLow) {
-            save(gp_t, file = file_dosages(tempdir, iSample, regionName, "piece.gp_t"))
-        }
-        
-        ## 
-        eij <- round(gp_t[2, ] + 2 * gp_t[3, ], 3) ## prevent weird rounding issues
-        fij <- round(gp_t[2, ] + 4 * gp_t[3, ], 3) ##
-
-        infoCount[, 1] <- infoCount[, 1, drop = FALSE] + eij
-        infoCount[, 2] <- infoCount[, 2, drop = FALSE] + (fij - eij**2)
-        ## this returns un-transposed results
-        max_gen <- get_max_gen_rapid(gp_t)
-        ## hweCount is NOT transposed!
-        hweCount[max_gen] <- hweCount[max_gen] + 1 ## hmmmmm not ideal
-        afCount <- afCount + (eij) / 2
-
-        ##
-        if (output_format == "bgvcf") {
-            if (output_haplotype_dosages) {
-                if (method == "pseudoHaploid") {
-                    q_t <- fbsoL[[1]][["gammaEK_t"]] + fbsoL[[2]][["gammaEK_t"]]
-                } else {
-                    ## do this here I suppose? 
-                    q_t <- 2 * fbsoL[[1]][["gammaEK_t"]]
-                }
-            } else {
-                q_t <- matrix()
-            }
-            vcf_matrix_to_out[, iiSample] <- rcpp_make_column_of_vcf(
-                gp_t = gp_t,
-                use_read_proportions = FALSE,
-                use_state_probabilities = output_haplotype_dosages,
-                add_x_2_cols = FALSE,
-                read_proportions = matrix(),
-                q_t = q_t,
-                x_t = matrix()
-            )
-            if (do_phasing) {
-
-                ##
-                w <- first_snp_in_region:last_snp_in_region
-                hap1 <- rcpp_int_expand(phasing[, 1], nSNPs)[w]
-                hap2 <- rcpp_int_expand(phasing[, 2], nSNPs)[w]
-
-                vcf_matrix_to_out[, iiSample] <-
-                    paste0(
-                        hap1, "|", hap2, 
-                        substring(vcf_matrix_to_out[, iiSample], first = 4, last = 100L)
-                    )
-
-            }
-            
-        } else if (output_format == "bgen") {
-            rrbgen::rcpp_place_gp_t_into_output(
-                gp_t,
-                gp_raw_t, ## storage matrix
-                iiSample, ## relative position
-                nSNPs = ncol(gp_t), ## ncol(gp_t) = nSNPsInRegion here
-                B_bit_prob
-            )
-        }
-
-    }
-    
-    return(
-        list(
-            gp_raw_t = gp_raw_t,
-            vcf_matrix_to_out = vcf_matrix_to_out,
-            infoCount = infoCount,
-            hweCount = hweCount,
-            afCount = afCount
-        )
-    )
 }
+
+
+
 
 
 
@@ -995,18 +800,21 @@ make_and_write_vcf_header <- function(
     K,
     do_phasing = FALSE
     ) {
-    if (do_phasing) {
-        gt_annot <- '##FORMAT=<ID=GT,Number=1,Type=String,Description="Phased genotypes">\n'
-    } else {
-        gt_annot <- '##FORMAT=<ID=GT,Number=1,Type=String,Description="Best Guessed Genotype with posterior probability threshold of 0.9">\n'
-    }
-    header <- paste0(
-        '##fileformat=VCFv4.0\n',
-        annot_header,        
-        gt_annot,
+
+    if (do_phasing)
+        gt_descript <- '"Phased genotypes"'
+    else
+        gt_descript <- "Best Guessed Genotype with posterior probability threshold of 0.9">'
+
+
+    header <- paste('##fileformat=VCFv4.0',
+        annot_header, 
+        paste0("##FORMAT=<ID=GT,Number=1,Type=String,Description=", gt_descript),
         '##FORMAT=<ID=GP,Number=3,Type=Float,Description="Posterior genotype probability of 0/0, 0/1, and 1/1">\n',
-        '##FORMAT=<ID=DS,Number=1,Type=Float,Description="Dosage">\n'
-    )
+        '##FORMAT=<ID=DS,Number=1,Type=Float,Description="Dosage">\n',
+        sep="\n")
+
+
     if (output_haplotype_dosages) {
         header <- paste0(
             header,

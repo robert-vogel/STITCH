@@ -386,29 +386,66 @@ STITCH <- function(
     ##
     ## either generate the data, or load it from before
     ##
-    generate_or_refactor_input(regenerateInput = regenerateInput, bundling_info = bundling_info, L = L, pos = pos, nSNPs = nSNPs, bam_files = bam_files, cram_files = cram_files, reference = reference, iSizeUpperLimit = iSizeUpperLimit, bqFilter = bqFilter, chr = chr, outputdir = outputdir, N = N, downsampleToCov = downsampleToCov, sampleNames = sampleNames, inputdir = inputdir, useSoftClippedBases = useSoftClippedBases, regionName = regionName, tempdir = tempdir, chrStart = chrStart, chrEnd = chrEnd, generateInputOnly = generateInputOnly, nCores = nCores, save_sampleReadsInfo = save_sampleReadsInfo, use_bx_tag = use_bx_tag, bxTagUpperLimit = bxTagUpperLimit)
+    generate_or_refactor_input(regenerateInput = regenerateInput,
+                               bundling_info = bundling_info,
+                               L = L,
+                               pos = pos,
+                               nSNPs = nSNPs,
+                               bam_files = bam_files,
+                               cram_files = cram_files,
+                               reference = reference,
+                               iSizeUpperLimit = iSizeUpperLimit,
+                               bqFilter = bqFilter,
+                               chr = chr,
+                               outputdir = outputdir,
+                               N = N,
+                               downsampleToCov = downsampleToCov,
+                               sampleNames = sampleNames,
+                               inputdir = inputdir,
+                               useSoftClippedBases = useSoftClippedBases,
+                               regionName = regionName,
+                               tempdir = tempdir,
+                               chrStart = chrStart,
+                               chrEnd = chrEnd,
+                               generateInputOnly = generateInputOnly,
+                               nCores = nCores,
+                               save_sampleReadsInfo = save_sampleReadsInfo,
+                               use_bx_tag = use_bx_tag,
+                               bxTagUpperLimit = bxTagUpperLimit)
     ## if only generating input data, we are done
     if (generateInputOnly)
         return(NULL)
 
 
-
-
-
     ##
     ## if necessary, shrink BAMs, but only if regenerateInput = FALSE
     ##
-    shrinkReads(N = N, nCores = nCores, originalRegionName = originalRegionName, regionName = regionName, bundling_info = bundling_info, tempdir = tempdir, inputdir = inputdir, inRegionL = inRegionL, regenerateInput = regenerateInput, inputBundleBlockSize = inputBundleBlockSize)
+    shrinkReads(N = N,
+                nCores = nCores,
+                originalRegionName = originalRegionName,
+                regionName = regionName,
+                bundling_info = bundling_info,
+                tempdir = tempdir,
+                inputdir = inputdir,
+                inRegionL = inRegionL,
+                regenerateInput = regenerateInput,
+                inputBundleBlockSize = inputBundleBlockSize)
 
 
 
     ##
     ## if we want, re-intersect with new set of positions
     ##
-    if(is.na(subsetSNPsfile)==FALSE & subsetSNPsfile!="NA") {
+    if(!is.na(subsetSNPsfile)  && subsetSNPsfile != "NA") {
         print_message(paste0("Subsetting SNPs from file ", subsetSNPsfile))
         ## load in positions
-        out <- subsetSNPsFunction(N=N,subsetSNPsfile=subsetSNPsfile,regionName=regionName,tempdir=tempdir,L=L,nCores=nCores,outputdir=outputdir)
+        out <- subsetSNPsFunction(N=N,
+                                  subsetSNPsfile=subsetSNPsfile,
+                                  regionName=regionName,
+                                  tempdir=tempdir,
+                                  L=L,
+                                  nCores=nCores,
+                                  outputdir=outputdir)
         print_message(paste0("Back to main ", subsetSNPsfile))
         keep <- out$keep
         T <- as.integer(sum(keep))
@@ -453,7 +490,12 @@ STITCH <- function(
     ## downsample to percent
     ##
     if(downsampleFraction < 1) {
-        downsampleToFraction(N=N,nCores=nCores,downsampleFraction=downsampleFraction,regionName=regionName,tempdir=tempdir, bundling_info = bundling_info)
+        downsampleToFraction(N=N,
+                             nCores=nCores,
+                             downsampleFraction=downsampleFraction,
+                             regionName=regionName,
+                             tempdir=tempdir,
+                             bundling_info = bundling_info)
     }
 
     ##
@@ -504,7 +546,20 @@ STITCH <- function(
     ## if we're so inclined, output input in VCF format, then exit
     ##
     if (outputInputInVCFFormat) {
-        out <- outputInputInVCFFunction(outputdir = outputdir, pos = pos, nSNPs = nSNPs, tempdir = tempdir, N = N, nCores = nCores, regionName = regionName, sampleNames = sampleNames, outputBlockSize = outputBlockSize, bundling_info = bundling_info, output_filename = output_filename, vcf.piece_unique = vcf.piece_unique, output_format = output_format, allSampleReads = allSampleReads)
+        out <- outputInputInVCFFunction(outputdir = outputdir,
+                                        pos = pos,
+                                        nSNPs = nSNPs,
+                                        tempdir = tempdir,
+                                        N = N,
+                                        nCores = nCores,
+                                        regionName = regionName,
+                                        sampleNames = sampleNames,
+                                        outputBlockSize = outputBlockSize,
+                                        bundling_info = bundling_info,
+                                        output_filename = output_filename,
+                                        vcf.piece_unique = vcf.piece_unique,
+                                        output_format = output_format,
+                                        allSampleReads = allSampleReads)
         return(NULL)
     }
 
@@ -541,8 +596,45 @@ STITCH <- function(
     ##
     ## initialize variables
     ##
-    out <- initialize_parameters(reference_haplotype_file = reference_haplotype_file, reference_legend_file = reference_legend_file, reference_sample_file = reference_sample_file, reference_populations = reference_populations, reference_phred = reference_phred, reference_iterations = reference_iterations, nSNPs = nSNPs, K = K, S = S, L = L, pos = pos, inputBundleBlockSize = inputBundleBlockSize, nCores = nCores, regionName = regionName, alleleCount = alleleCount, expRate = expRate, nGen = nGen, tempdir = tempdir, outputdir = outputdir, pseudoHaploidModel = pseudoHaploidModel, emissionThreshold = emissionThreshold, alphaMatThreshold = alphaMatThreshold, minRate = minRate, maxRate = maxRate, regionStart = regionStart, regionEnd = regionEnd, buffer = buffer, niterations = niterations, grid = grid, grid_distances = grid_distances, nGrids = nGrids, reference_shuffleHaplotypeIterations = reference_shuffleHaplotypeIterations, L_grid = L_grid, plot_shuffle_haplotype_attempts = plot_shuffle_haplotype_attempts, shuffle_bin_radius = shuffle_bin_radius, snps_in_grid_1_based = snps_in_grid_1_based, plotHapSumDuringIterations = plotHapSumDuringIterations, cM_grid = cM_grid,
-    plotReferenceAlleleCount = plotReferenceAlleleCount)
+    out <- initialize_parameters(reference_haplotype_file = reference_haplotype_file,
+                                 reference_legend_file = reference_legend_file,
+                                 reference_sample_file = reference_sample_file,
+                                 reference_populations = reference_populations,
+                                 reference_phred = reference_phred,
+                                 reference_iterations = reference_iterations,
+                                 nSNPs = nSNPs,
+                                 K = K,
+                                 S = S,
+                                 L = L,
+                                 pos = pos,
+                                 inputBundleBlockSize = inputBundleBlockSize,
+                                 nCores = nCores,
+                                 regionName = regionName,
+                                 alleleCount = alleleCount,
+                                 expRate = expRate,
+                                 nGen = nGen,
+                                 tempdir = tempdir,
+                                 outputdir = outputdir,
+                                 pseudoHaploidModel = pseudoHaploidModel,
+                                 emissionThreshold = emissionThreshold,
+                                 alphaMatThreshold = alphaMatThreshold,
+                                 minRate = minRate,
+                                 maxRate = maxRate,
+                                 regionStart = regionStart,
+                                 regionEnd = regionEnd,
+                                 buffer = buffer,
+                                 niterations = niterations,
+                                 grid = grid,
+                                 grid_distances = grid_distances,
+                                 nGrids = nGrids,
+                                 reference_shuffleHaplotypeIterations = reference_shuffleHaplotypeIterations,
+                                 L_grid = L_grid,
+                                 plot_shuffle_haplotype_attempts = plot_shuffle_haplotype_attempts,
+                                 shuffle_bin_radius = shuffle_bin_radius,
+                                 snps_in_grid_1_based = snps_in_grid_1_based,
+                                 plotHapSumDuringIterations = plotHapSumDuringIterations,
+                                 cM_grid = cM_grid,
+                                 plotReferenceAlleleCount = plotReferenceAlleleCount)
     eHapsCurrent_tc <- out$eHapsCurrent_tc
     alphaMatCurrent_tc <- out$alphaMatCurrent_tc
     hapSumCurrent_tc <- out$hapSumCurrent_tc
@@ -591,15 +683,16 @@ STITCH <- function(
 
 
 
-    ##
+    ########################################################################
     ## run EM algorithm here
-    ##
+    ########################################################################
+
+
     print_message_and_save_time(outputdir, regionName, "Start EM", "startEM")
     print_message(paste0("Number of samples: ", N))
     print_message(paste0("Number of SNPs: ", nSNPs))
-    if (nGrids != nSNPs) {
+    if (nGrids != nSNPs)
         print_message(paste0("Number of grids: ", nGrids))
-    }
 
 
     for(iteration in 1:niterations) {
@@ -615,7 +708,60 @@ STITCH <- function(
         ##
         ## fork out and get results
         ##
-        results <- completeSampleIteration(eHapsCurrent_tc = eHapsCurrent_tc, alphaMatCurrent_tc = alphaMatCurrent_tc, sigmaCurrent_m = sigmaCurrent_m, priorCurrent_m = priorCurrent_m, N = N, tempdir = tempdir,chr=chr, maxDifferenceBetweenReads=maxDifferenceBetweenReads,maxEmissionMatrixDifference = maxEmissionMatrixDifference,Jmax=Jmax,highCovInLow=highCovInLow,iteration=iteration,method=method,expRate=expRate,minRate=minRate,maxRate=maxRate,niterations=niterations,splitReadIterations=splitReadIterations,shuffleHaplotypeIterations=shuffleHaplotypeIterations,nCores=nCores,L=L,nGen=nGen,emissionThreshold=emissionThreshold,alphaMatThreshold=alphaMatThreshold,gen=gen,outputdir=outputdir,pseudoHaploidModel=pseudoHaploidModel,outputHaplotypeProbabilities=outputHaplotypeProbabilities,switchModelIteration=switchModelIteration,regionName=regionName,restartIterations=restartIterations,refillIterations=refillIterations,outputBlockSize=outputBlockSize, bundling_info = bundling_info, alleleCount = alleleCount, phase = phase, samples_with_phase = samples_with_phase, vcf.piece_unique = vcf.piece_unique, grid = grid, grid_distances = grid_distances, L_grid = L_grid, B_bit_prob = B_bit_prob, start_and_end_minus_buffer = start_and_end_minus_buffer, shuffle_bin_nSNPs = shuffle_bin_nSNPs, shuffle_bin_radius = shuffle_bin_radius, plot_shuffle_haplotype_attempts = plot_shuffle_haplotype_attempts, blocks_for_output = blocks_for_output, allSampleReads = allSampleReads, snps_in_grid_1_based = snps_in_grid_1_based, minimizeSwitchingIterations = minimizeSwitchingIterations, useTempdirWhileWriting = useTempdirWhileWriting, do_phasing = do_phasing, phasing_method = phasing_method, phasing_n_votes = phasing_n_votes)
+        results <- completeSampleIteration(eHapsCurrent_tc = eHapsCurrent_tc,
+                                           alphaMatCurrent_tc = alphaMatCurrent_tc,
+                                           sigmaCurrent_m = sigmaCurrent_m,
+                                           priorCurrent_m = priorCurrent_m,
+                                           N = N,
+                                           tempdir = tempdir,
+                                           chr=chr,
+                                           maxDifferenceBetweenReads=maxDifferenceBetweenReads,
+                                           maxEmissionMatrixDifference = maxEmissionMatrixDifference,
+                                           Jmax=Jmax,
+                                           highCovInLow=highCovInLow,
+                                           iteration=iteration,
+                                           method=method,
+                                           expRate=expRate,
+                                           minRate=minRate,
+                                           maxRate=maxRate,
+                                           niterations=niterations,
+                                           splitReadIterations=splitReadIterations,
+                                           shuffleHaplotypeIterations=shuffleHaplotypeIterations,
+                                           nCores=nCores,
+                                           L=L,
+                                           nGen=nGen,
+                                           emissionThreshold=emissionThreshold,
+                                           alphaMatThreshold=alphaMatThreshold,
+                                           gen=gen,
+                                           outputdir=outputdir,
+                                           pseudoHaploidModel=pseudoHaploidModel,
+                                           outputHaplotypeProbabilities=outputHaplotypeProbabilities,
+                                           switchModelIteration=switchModelIteration,
+                                           regionName=regionName,
+                                           restartIterations=restartIterations,
+                                           refillIterations=refillIterations,
+                                           outputBlockSize=outputBlockSize,
+                                           bundling_info = bundling_info,
+                                           alleleCount = alleleCount,
+                                           phase = phase,
+                                           samples_with_phase = samples_with_phase,
+                                           vcf.piece_unique = vcf.piece_unique,
+                                           grid = grid,
+                                           grid_distances = grid_distances,
+                                           L_grid = L_grid,
+                                           B_bit_prob = B_bit_prob,
+                                           start_and_end_minus_buffer = start_and_end_minus_buffer,
+                                           shuffle_bin_nSNPs = shuffle_bin_nSNPs,
+                                           shuffle_bin_radius = shuffle_bin_radius,
+                                           plot_shuffle_haplotype_attempts = plot_shuffle_haplotype_attempts,
+                                           blocks_for_output = blocks_for_output,
+                                           allSampleReads = allSampleReads,
+                                           snps_in_grid_1_based = snps_in_grid_1_based,
+                                           minimizeSwitchingIterations = minimizeSwitchingIterations,
+                                           useTempdirWhileWriting = useTempdirWhileWriting,
+                                           do_phasing = do_phasing,
+                                           phasing_method = phasing_method,
+                                           phasing_n_votes = phasing_n_votes)
         ##
         if (iteration == niterations) {
             allPhasing <- results$allPhasing
@@ -637,9 +783,22 @@ STITCH <- function(
             rm(results)
             ## save everything if needed
             if (keepInterimFiles) {
-                save(
-                    hapSumCurrent_tc, eHapsCurrent_tc, alphaMatCurrent_tc, sigmaCurrent_m ,priorCurrent_m, eHapsFuture_tc, alphaMatFuture_tc , sigmaFuture_m, priorFuture_m,
-                    file = file.path(outputdir, "RData", paste0("interim.",regionName,".iteration",iteration,".RData"))
+                save(hapSumCurrent_tc,
+                    eHapsCurrent_tc,
+                    alphaMatCurrent_tc,
+                    sigmaCurrent_m ,
+                    priorCurrent_m,
+                    eHapsFuture_tc,
+                    alphaMatFuture_tc ,
+                    sigmaFuture_m,
+                    priorFuture_m,
+                    file = file.path(outputdir,
+                                     "RData",
+                                     paste0("interim.",
+                                            regionName,
+                                            ".iteration",
+                                            iteration,
+                                            ".RData"))
                 )
             }
             ## plot interim plots to understand performance better
@@ -670,46 +829,40 @@ STITCH <- function(
 
     print_message_and_save_time(outputdir, regionName, "End EM", "endEM")
 
-    ##
+
+
+    ########################################################################
     ## build final output
-    ##
-    out <- make_and_write_output_file(
-        output_filename = output_filename,
-        outputdir = outputdir,
-        regionName = regionName,
-        output_format = output_format,
-        blocks_for_output = blocks_for_output,
-        allAlphaBetaBlocks = allAlphaBetaBlocks,
-        allPhasing = allPhasing,
-        reference_panel_SNPs = reference_panel_SNPs,
-        priorCurrent_m = priorCurrent_m,
-        sigmaCurrent_m = sigmaCurrent_m,
-        alphaMatCurrent_tc = alphaMatCurrent_tc,
-        eHapsCurrent_tc = eHapsCurrent_tc,
-        N = N,
-        method = method,
-        sampleNames = sampleNames,
-        nSNPs = nSNPs,
-        nCores = nCores,
-        B_bit_prob = B_bit_prob,
-        bundling_info = bundling_info,
-        tempdir = tempdir,
-        grid = grid,
-        nGrids = nGrids,
-        alleleCount = alleleCount,
-        pos = pos,
-        K = K,
-        highCovInLow = highCovInLow,
-        start_and_end_minus_buffer = start_and_end_minus_buffer,
-        allSampleReads = allSampleReads,
-        niterations = niterations,
-        maxEmissionMatrixDifference = maxEmissionMatrixDifference,
-        maxDifferenceBetweenReads = maxDifferenceBetweenReads,
-        Jmax = Jmax,
-        useTempdirWhileWriting = useTempdirWhileWriting,
-        output_haplotype_dosages = output_haplotype_dosages,
-        do_phasing = do_phasing
-    )
+    ########################################################################
+
+    if (output_format == "bgen") {
+        writer <- mk_bgen_writer(output_filename,
+                                 ouput_dir
+            sampleNames = sampleNames,
+            B_bit_prob,
+            start_and_end_minus_buffer
+            allSampleReads = allSampleReads,
+            useTempdirWhileWriting = useTempdirWhileWriting)
+
+        ## I want the model closure to only take sample reads as
+        ## input.  Everything else in context of the closure.
+        model <- mk_bgen_model()
+    } else if (output_format == "bgvcf") {
+        writer <- mk_bgvcf_writer()
+        model <- mk_bgvcf_model()
+    } else if (output_format == "bcf") {
+        writer <- mk_bcf_writer()
+        model <- mk_bcf_model()
+    } else
+        stop("Error: output_format must be bgen, bcf, or bgvcf")
+
+    ## go through all samples and loci, impute genotypes under the
+    ## model closure.  Use the writer closure to interpret model
+    ## results.
+    out <- make_and_write_output_file(writer,
+                                      model,
+                                      nCores,
+                                      K)
 
     gen_imp <- out$gen_imp
     estimatedAlleleFrequency <- out$estimatedAlleleFrequency
@@ -722,12 +875,11 @@ STITCH <- function(
     ## now, if there was a buffer, remove the unwanted SNPs from what's saved to disk
     ## not sure how useful it is to save without buffer?
     ##
-    if (is.na(regionStart) == FALSE & is.na(regionEnd) == FALSE) {
+    if (!is.na(regionStart) && !is.na(regionEnd)) {
         ##
         ## first, save (with buffer) to disk
         ##
-        save(
-            eHapsCurrent_tc, alphaMatCurrent_tc,
+        save(eHapsCurrent_tc, alphaMatCurrent_tc,
             sigmaCurrent_m, priorCurrent_m,
             hapSumCurrent_tc,
             alleleCount,
@@ -746,7 +898,30 @@ STITCH <- function(
         ##
         ## next, remove buffer
         ##
-        out <- remove_buffer_from_variables(L = L,  regionStart = regionStart, regionEnd = regionEnd, pos = pos, gen = gen, phase = phase, alleleCount =  alleleCount, highCovInLow = highCovInLow, gen_imp = gen_imp, alphaMatCurrent_tc = alphaMatCurrent_tc, sigmaCurrent_m = sigmaCurrent_m, eHapsCurrent_tc = eHapsCurrent_tc, hapSumCurrent_tc = hapSumCurrent_tc, grid = grid, grid_distances = grid_distances, L_grid = L_grid, nGrids = nGrids, gridWindowSize = gridWindowSize, hwe = hwe, hweCount = hweCount, info = info, passQC = passQC, estimatedAlleleFrequency = estimatedAlleleFrequency, ref_alleleCount = ref_alleleCount)
+        out <- remove_buffer_from_variables(L = L,
+                                            regionStart = regionStart,
+                                            regionEnd = regionEnd,
+                                            pos = pos,
+                                            gen = gen,
+                                            phase = phase,
+                                            alleleCount =  alleleCount,
+                                            highCovInLow = highCovInLow,
+                                            gen_imp = gen_imp,
+                                            alphaMatCurrent_tc = alphaMatCurrent_tc,
+                                            sigmaCurrent_m = sigmaCurrent_m,
+                                            eHapsCurrent_tc = eHapsCurrent_tc,
+                                            hapSumCurrent_tc = hapSumCurrent_tc,
+                                            grid = grid,
+                                            grid_distances = grid_distances,
+                                            L_grid = L_grid,
+                                            nGrids = nGrids,
+                                            gridWindowSize = gridWindowSize,
+                                            hwe = hwe,
+                                            hweCount = hweCount,
+                                            info = info,
+                                            passQC = passQC,
+                                            estimatedAlleleFrequency = estimatedAlleleFrequency,
+                                            ref_alleleCount = ref_alleleCount)
         pos <- out$pos
         gen <- out$gen
         phase <- out$phase
@@ -776,7 +951,10 @@ STITCH <- function(
 
 
     ##
+    ########################################################################
     ## save important files from EM output
+    ########################################################################
+    ##
     ##
     print_message("Save RData objects to disk")
     save(
@@ -2910,28 +3088,64 @@ getOutputBlockRange <- function(
 ## basically, replicate how I mclapply
 ## used to be manual, not basically uses cut and reformats
 
+
+#' Report sample index bounds per core
+#'
+#' Samples for processing are distributed across cores by an index.  The
+#' range of index values specified are inclusive, i.e. c(1,5) includes
+#' all samples with indexes between 1 and 5 inclusive.
+#'
+#' @param N (integer) number of samples
+#' @param nCores (integer) number of cores
+#' @return list A list with length l = min([nCores, N]), indexed by an integer 
+#'      [1, l], in which each element is a length 2 integer vector specifing sample
+#'      index bounds per core.
+#' @examples
+#' getSampleRange(2, 7)
+#' getSampleRange(7, 7)
+#' getSampleRange(25, 7)
 #' @export
-getSampleRange <- function(
-    N,
-    nCores
-) {
-    ## upon closer inspection, this might be slow? oh well
-    if (nCores == 1) {
-        x <- rep(1, N)
-    } else {
-        x <- as.integer(cut(1:N, nCores))
+getSampleRange <- function(N, nCores) {
+    if (N < 0 || nCores < 0)
+        stop("Error: arguments must be positive integers")
+
+    if ( (N - floor(N)) != 0 || (nCores - floor(nCores)) != 0)
+        stop("Error: arguments must be positive integers")
+
+    sample_ranges <- list()
+    samples_per_core <- floor(N / nCores)
+    samps_remain <- N %% nCores
+
+    ## If the number of cores is greater than sample, then the length of
+    ## the returned list is N mod nCores
+    if (samples_per_core == 0) {
+        for (i in seq(1, samps_remain))
+            sample_ranges[[i]] <- c(i,i)
+
+        return(sample_ranges)
     }
-    w <- which(diff(x) > 0)
-    start <- c(1, w + 1)
-    end <- c(w, N)
-    sampleRange <- lapply(1:nCores, function(i_core) {
-        x <- c(start[i_core], end[i_core])
-        if (sum(is.na(x)) > 0)
-            return(NULL)
-        return(x)
-    })
-    sampleRange <- sampleRange[sapply(sampleRange, is.null) == FALSE]
-    return(sampleRange)
+
+    
+    ## samp_idx_increment is defined so that c(start_idx, end_idx)
+    ## are inclusive bounds
+    samp_idx_increment <- samples_per_core - 1
+
+    samp_idx_start <- 1
+    samp_idx_end <- samp_idx_start + samp_idx_increment
+    for (core_i in seq(nCores)) {
+
+        sample_ranges[[core_i]] <- c(samp_idx_start, samp_idx_end)
+        if(samps_remain > 0) {
+            samp_idx_end <- samp_idx_end + 1
+            sample_ranges[[core_i]][2] <- samp_idx_end
+            samps_remain <- samps_remain - 1
+        }
+
+        samp_idx_start <- samp_idx_end + 1
+        samp_idx_end <- samp_idx_end + samp_idx_increment
+    }
+        
+    return(sample_ranges)
 }
 
 

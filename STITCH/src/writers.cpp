@@ -3,10 +3,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <iostream>
+#include <htslib/vcf.h>
 
 
 // [[Rcpp::depends(RcppArmadillo)]]
 using namespace Rcpp;
+
 
 //' @export
 // [[Rcpp::export]]
@@ -103,3 +105,4 @@ Rcpp::StringVector rcpp_make_column_of_vcf(
     }
     return output;
 }
+
