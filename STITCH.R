@@ -472,12 +472,6 @@ option_list <- list(
         type = "logical",
         help = "Whether to try and output phasing (experimental) [default FALSE] ",
         default = FALSE
-    ),
-    make_option(
-        "--seed",
-        type = "integer",
-        help = "Set the random seed to a specified positive integer.",
-        default = NULL
     )
 )
 opt <- suppressWarnings(parse_args(OptionParser(option_list = option_list)))
@@ -562,6 +556,5 @@ STITCH(
     output_haplotype_dosages = opt$output_haplotype_dosages,
     use_bx_tag = opt$use_bx_tag,
     bxTagUpperLimit = opt$bxTagUpperLimit,
-    do_phasing = opt$do_phasing,
-    seed = opt$seed
+    do_phasing = opt$do_phasing
 )

@@ -263,13 +263,15 @@ make_and_write_output_file <- function(
             vcf_matrix_to_out[, 7] <- "PASS"
             vcf_matrix_to_out[, 8] <- INFO
             vcf_matrix_to_out[, 9] <- FORMAT
-            write.table(vcf_matrix_to_out,
+            data.table::fwrite(
+                vcf_matrix_to_out,
                 file = output_unbgzipped,
                 row.names = FALSE,
                 col.names = FALSE,
                 sep = "\t",
                 quote = FALSE,
                 append = TRUE,
+                nThread = nCores
             )
 
             rm(vcf_matrix_to_out)
@@ -1167,18 +1169,8 @@ get_blocks_in_vector_form <- function(blocks_for_output, nGrids) {
     return(blocks_in_vector_form)
 }
 
+## this assumes reads are sorted but that need not be the case for old STITCH
 ## 
-##
-## Assumption: reads are sorted but that need not be the case for old STITCH
-## 
-# @param N
-# @param blocks_for_output
-# @param nCores
-# @param tempdir
-# @param regionName
-# @param bundling_info
-# @param nGrids
-# @param allSampleReads
 determine_reads_in_output_blocks <- function(
     N,
     blocks_for_output,
